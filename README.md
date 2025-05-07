@@ -112,6 +112,32 @@ The web interface will open in your default browser at http://localhost:8501
    
 4. **Configure Settings**
    - In the "Settings" tab, you can enter your Google API key if needed
+   - 
+## Screenshots from the demo
+**processing documents.**
+![image](https://github.com/user-attachments/assets/ba892007-92b1-4627-87c1-ac5a46b25c86)
+
+**processed documents.**
+![image](https://github.com/user-attachments/assets/2573f07a-67e4-4ce4-8ba2-c6408c095cbf)
+
+**Question answering.**
+![image](https://github.com/user-attachments/assets/1e4e8463-eb0c-459c-9019-465bee521350)
+
+**Sources used for the above answers**
+![image](https://github.com/user-attachments/assets/e7b979de-6b3d-457d-85d4-e89baa7a0d9d)
+
+![image](https://github.com/user-attachments/assets/e8f9a157-d68b-43f6-bc51-0e6713c5b34d)
+
+**Calculator**
+![image](https://github.com/user-attachments/assets/c1422f8a-aff3-4ae7-9448-760fd39dff9b)
+
+**Dictionary**
+![image](https://github.com/user-attachments/assets/27235dc9-0d53-426d-b0fb-7dc3ce274332)
+
+
+**system logs**
+![image](https://github.com/user-attachments/assets/53aaa737-00bb-4523-9de4-5ca4b84e54fc)
+
 
 ## Example Queries
 
