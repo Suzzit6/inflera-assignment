@@ -1,6 +1,4 @@
-I'll create a comprehensive README.md file that looks human-written and covers all the requirements mentioned in the assignment.
 
-```markdown
 # RAG-Powered Multi-Agent Q&A Assistant
 
 ## Overview
@@ -134,6 +132,3 @@ The retrieval system uses semantic search to find the top 3 most relevant chunks
 2. Routed to the appropriate agent (Calculator, Dictionary, or RAG)
 3. Agent processes the query using its specialized tools
 4. Results are displayed with appropriate attribution
-
-
-```
