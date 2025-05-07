@@ -1,0 +1,58 @@
+# Inflera Technologies Pty Limited - How We Work
+
+## Company Overview
+Inflera Technologies Pty Limited is a leading technology solutions provider specializing in digital transformation, cloud services, and innovative software development.
+
+## Our Work Process
+
+### 1. Agile Development Methodology
+- We follow Scrum framework with 2-week sprints
+- Daily stand-up meetings at 9:30 AM
+- Sprint planning every other Monday
+- Retrospectives at the end of each sprint
+
+### 2. Project Lifecycle
+- Discovery and requirement gathering
+- Solution architecture and design
+- Development and iterative testing
+- User acceptance testing
+- Deployment and continuous improvement
+
+### 3. Communication Channels
+- Microsoft Teams for internal communication
+- Slack for client communications
+- JIRA for project management
+- Confluence for documentation
+- Weekly client progress reports
+
+### 4. Remote Work Policy
+- Flexible work hours between 7 AM - 7 PM
+- Core collaboration hours: 10 AM - 3 PM
+- Work from home option 3 days per week
+- Quarterly in-person team building events
+
+### 5. Code Quality Standards
+- Peer code reviews required for all pull requests
+- Minimum 80% test coverage for new features
+- CI/CD pipeline for automated testing
+- Adherence to agreed coding standards
+
+### 6. Client Engagement Model
+- Dedicated account manager for each client
+- Weekly progress updates
+- Monthly steering committee meetings
+- Quarterly business review sessions
+
+## Our Values
+- Innovation First
+- Client Success
+- Collaborative Excellence
+- Continuous Learning
+- Work-Life Balance
+
+## Technology Stack
+- Front-end: React, Angular, Vue.js
+- Back-end: Node.js, Python, Java
+- Cloud: AWS, Azure, Google Cloud
+- Database: MongoDB, PostgreSQL, MySQL
+- DevOps: Docker, Kubernetes, Jenkins
