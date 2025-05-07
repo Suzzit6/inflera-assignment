@@ -510,7 +510,7 @@ def create_qa_chain(vectorstore):
     add_log("Initializing LLM...")
     print("Initializing LLM...")
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash",convert_system_message_to_human=True)
         
         add_log("Creating QA chain...")
         print("Creating QA chain...")
