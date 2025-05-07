@@ -502,11 +502,11 @@ def create_qa_chain(vectorstore):
     print("Setting up retriever...")
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
     
-    api_key = ""
+    # api_key = ""
     
    
-    os.environ["GOOGLE_API_KEY"] = api_key
-    
+    # os.environ["GOOGLE_API_KEY"] = api_key
+    api_key = os.environ["GOOGLE_API_KEY"]
     add_log("Initializing LLM...")
     print("Initializing LLM...")
     try:
