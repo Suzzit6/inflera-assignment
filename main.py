@@ -271,38 +271,39 @@ def calculator_agent(question):
         match = re.search(pattern, question.lower())
         if match:
             potential_expression = match.group(1).strip()
-            
-            potential_expression = re.sub(r'\b(?!sin|cos|tan|log|sqrt|factorial|pi|exp)[a-zA-Z]+\b', '', potential_expression)
-            
+
+            potential_expression = re.sub(r'[a-zA-Z]', '', potential_expression)
             potential_expression = potential_expression.replace('^', '**')
             
             if '!' in potential_expression:
+
                 factorial_match = re.search(r'(\d+)!', potential_expression)
                 if factorial_match:
                     num = int(factorial_match.group(1))
                     potential_expression = potential_expression.replace(f"{num}!", f"factorial({num})")
             
+            #square roots
             if 'sqrt' in question.lower() or '√' in question:
-                sqrt_match = re.search(r'sqrt\s*\(?(\d+(?:\.\d+)?)\)?', question.lower())
+                sqrt_match = re.search(r'sqrt\s*\(?(\d+)\)?', question.lower())
                 if not sqrt_match:
-                    sqrt_match = re.search(r'√\s*\(?(\d+(?:\.\d+)?)\)?', question)
+                    sqrt_match = re.search(r'√\s*\(?(\d+)\)?', question)
                 if sqrt_match:
-                    num = float(sqrt_match.group(1))
+                    num = int(sqrt_match.group(1))
                     potential_expression = f"sqrt({num})"
             
-            #logs
+            #log
             if 'log' in question.lower():
-                log_match = re.search(r'log\s*\(?(\d+(?:\.\d+)?)\)?', question.lower())
+                log_match = re.search(r'log\s*\(?(\d+)\)?', question.lower())
                 if log_match:
-                    num = float(log_match.group(1))
+                    num = int(log_match.group(1))
                     potential_expression = f"log({num})"
             
-            # trigno
+            #trigonometric
             if any(trig in question.lower() for trig in ['sin', 'cos', 'tan']):
-                trig_match = re.search(r'(sin|cos|tan)\s*\(?(\d+(?:\.\d+)?)\)?', question.lower())
+                trig_match = re.search(r'(sin|cos|tan)\s*\(?(\d+)\)?', question.lower())
                 if trig_match:
                     func = trig_match.group(1)
-                    angle = float(trig_match.group(2))
+                    angle = int(trig_match.group(2))
                     potential_expression = f"{func}({angle}*pi/180)"  # Convert to radians
             
             if potential_expression and any(c in potential_expression for c in '0123456789+-*/()!^'):
@@ -310,7 +311,7 @@ def calculator_agent(question):
                 break
     
     if not math_expression:
-        numbers = re.findall(r'\d+(?:\.\d+)?', question)
+        numbers = re.findall(r'\d+', question)
         if "add" in question.lower() or "sum" in question.lower() or "plus" in question.lower() or "+" in question.lower():
             if len(numbers) >= 2:
                 math_expression = f"{numbers[0]} + {numbers[1]}"
@@ -335,25 +336,22 @@ def calculator_agent(question):
         elif "log" in question.lower() or "logarithm" in question.lower():
             if len(numbers) >= 1:
                 math_expression = f"log({numbers[0]})"
-        elif any(trig in question.lower() for trig in ['sin', 'cos', 'tan']):
-            if len(numbers) >= 1:
-                for trig in ['sin', 'cos', 'tan']:
-                    if trig in question.lower():
-                        math_expression = f"{trig}({numbers[0]}*pi/180)"
-                        break
     
     if math_expression:
         try:
+            # Make sure sympy's functions are available in the namespace
             x = symbols('x')
             namespace = {"factorial": factorial, "sqrt": sqrt, "log": log, 
                         "exp": exp, "sin": sin, "cos": cos, "tan": tan, "pi": pi}
             
             result = sympify(math_expression, locals=namespace)
             
+            # Handle complex results
             if result.is_real:
                 if result.is_integer:
                     result_str = str(int(result))
                 else:
+                    # Format floats to a reasonable precision
                     result_str = f"{float(result):.6f}".rstrip('0').rstrip('.')
             else:
                 result_str = str(result)
@@ -565,10 +563,9 @@ def query_system_with_info(question, tool="Dictionary"):
             "error": str(e)
         }
 
-
 def route_query(question):
     question_lower = question.lower()
-    
+    print(f"Routing query: '{question}'")
     if any(keyword in question_lower for keyword in ["calculate", "compute", "math", "sum", "difference", "multiply", "divide","plus","minus","add","+","-","*","/","factorial","!","power","exponent","^","square root","sqrt","√","log","logarithm","trigonometric","sin","cos","tan","pi","trig","trigonometry","trigonometrical","trigonometric functions","trigonometric ratios","trigonometric identities"]):
         add_log("Routing to Calculator agent")
         print("Routing to Calculator agent")
@@ -843,6 +840,8 @@ with tab4:
             add_log("API key saved")
             st.success("API key saved successfully!")
             
+            # If documents are processed but QA chain failed due to missing API key,
+            # try to recreate the QA chain
             if st.session_state.vector_store is not None and st.session_state.qa_chain is None:
                 st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
                 if st.session_state.qa_chain is not None:
