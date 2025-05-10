@@ -11,7 +11,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from PyDictionary import PyDictionary
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import TextLoader
-
+import re
+from sympy import symbols, sympify, factorial, sqrt, log, exp, sin, cos, tan, pi
 st.set_page_config(
     page_title="Inflera Document Assistant",
     page_icon="📚",
@@ -137,9 +138,8 @@ if 'agent_details' not in st.session_state:
 def add_log(message):
     timestamp = time.strftime("%H:%M:%S")
     st.session_state.logs.append(f"[{timestamp}] {message}")
-    # No need to force rerun, will update naturally
 
-# Load documents function
+
 def load_documents(uploaded_files):
     docs = []
     processed_files = []
@@ -257,30 +257,107 @@ def calculator_agent(question):
     add_log(f"Calculator processing: '{question}'")
     print(f"Calculator processing: '{question}'")
 
-    import re
-    from sympy import sympify
-    
     math_expression = None
     
-    numbers = re.findall(r'\d+', question)
-    if "add" in question.lower() or "sum" in question.lower() or "plus" in question.lower() or "+" in question.lower():
-        if len(numbers) >= 2:
-            math_expression = f"{numbers[0]} + {numbers[1]}"
-    elif "subtract" in question.lower() or "minus" in question.lower() or "difference" in question.lower() or "-" in question.lower():
-        if len(numbers) >= 2:
-            math_expression = f"{numbers[0]} - {numbers[1]}"
-    elif "multiply" in question.lower() or "product" in question.lower() or "*" in question.lower():
-        if len(numbers) >= 2:
-            math_expression = f"{numbers[0]} * {numbers[1]}"
-    elif "divide" in question.lower() or "/" in question.lower():
-        if len(numbers) >= 2:
-            math_expression = f"{numbers[0]} / {numbers[1]}"
+    expression_patterns = [
+        r'calculate\s+(.*)',
+        r'compute\s+(.*)',
+        r'solve\s+(.*)',
+        r'evaluate\s+(.*)',
+        r'(.*[\d\+\-\*\/\^\!\(\)\s]+.*)'
+    ]
+    
+    for pattern in expression_patterns:
+        match = re.search(pattern, question.lower())
+        if match:
+            potential_expression = match.group(1).strip()
+
+            potential_expression = re.sub(r'[a-zA-Z]', '', potential_expression)
+            potential_expression = potential_expression.replace('^', '**')
+            
+            if '!' in potential_expression:
+
+                factorial_match = re.search(r'(\d+)!', potential_expression)
+                if factorial_match:
+                    num = int(factorial_match.group(1))
+                    potential_expression = potential_expression.replace(f"{num}!", f"factorial({num})")
+            
+            #square roots
+            if 'sqrt' in question.lower() or '√' in question:
+                sqrt_match = re.search(r'sqrt\s*\(?(\d+)\)?', question.lower())
+                if not sqrt_match:
+                    sqrt_match = re.search(r'√\s*\(?(\d+)\)?', question)
+                if sqrt_match:
+                    num = int(sqrt_match.group(1))
+                    potential_expression = f"sqrt({num})"
+            
+            #log
+            if 'log' in question.lower():
+                log_match = re.search(r'log\s*\(?(\d+)\)?', question.lower())
+                if log_match:
+                    num = int(log_match.group(1))
+                    potential_expression = f"log({num})"
+            
+            #trigonometric
+            if any(trig in question.lower() for trig in ['sin', 'cos', 'tan']):
+                trig_match = re.search(r'(sin|cos|tan)\s*\(?(\d+)\)?', question.lower())
+                if trig_match:
+                    func = trig_match.group(1)
+                    angle = int(trig_match.group(2))
+                    potential_expression = f"{func}({angle}*pi/180)"  # Convert to radians
+            
+            if potential_expression and any(c in potential_expression for c in '0123456789+-*/()!^'):
+                math_expression = potential_expression
+                break
+    
+    if not math_expression:
+        numbers = re.findall(r'\d+', question)
+        if "add" in question.lower() or "sum" in question.lower() or "plus" in question.lower() or "+" in question.lower():
+            if len(numbers) >= 2:
+                math_expression = f"{numbers[0]} + {numbers[1]}"
+        elif "subtract" in question.lower() or "minus" in question.lower() or "difference" in question.lower() or "-" in question.lower():
+            if len(numbers) >= 2:
+                math_expression = f"{numbers[0]} - {numbers[1]}"
+        elif "multiply" in question.lower() or "product" in question.lower() or "*" in question.lower():
+            if len(numbers) >= 2:
+                math_expression = f"{numbers[0]} * {numbers[1]}"
+        elif "divide" in question.lower() or "/" in question.lower():
+            if len(numbers) >= 2:
+                math_expression = f"{numbers[0]} / {numbers[1]}"
+        elif "factorial" in question.lower() or "!" in question:
+            if len(numbers) >= 1:
+                math_expression = f"factorial({numbers[0]})"
+        elif "power" in question.lower() or "exponent" in question.lower() or "^" in question or "to the power" in question.lower():
+            if len(numbers) >= 2:
+                math_expression = f"{numbers[0]} ** {numbers[1]}"
+        elif "square root" in question.lower() or "sqrt" in question.lower() or "√" in question:
+            if len(numbers) >= 1:
+                math_expression = f"sqrt({numbers[0]})"
+        elif "log" in question.lower() or "logarithm" in question.lower():
+            if len(numbers) >= 1:
+                math_expression = f"log({numbers[0]})"
     
     if math_expression:
         try:
-            result = sympify(math_expression)
+            # Make sure sympy's functions are available in the namespace
+            x = symbols('x')
+            namespace = {"factorial": factorial, "sqrt": sqrt, "log": log, 
+                        "exp": exp, "sin": sin, "cos": cos, "tan": tan, "pi": pi}
+            
+            result = sympify(math_expression, locals=namespace)
+            
+            # Handle complex results
+            if result.is_real:
+                if result.is_integer:
+                    result_str = str(int(result))
+                else:
+                    # Format floats to a reasonable precision
+                    result_str = f"{float(result):.6f}".rstrip('0').rstrip('.')
+            else:
+                result_str = str(result)
+            
             return {
-                "result": f"Calculator result: {result}",
+                "result": f"Calculator result: {result_str}",
                 "tool_used": "Calculator",
                 "math_expression": math_expression
             }
@@ -296,7 +373,6 @@ def calculator_agent(question):
             "tool_used": "Calculator",
             "error": "Failed to parse expression"
         }
-        
         
 def dictionary_agent(question):
     add_log(f"Dictionary processing: '{question}'")
@@ -434,14 +510,27 @@ def query_system(question):
             }
             st.session_state.sources = []
             
-        else:  # RAG
+        else: 
             result = st.session_state.qa_chain(question)
-            st.session_state.answer = result["result"]
-            st.session_state.sources = result["source_documents"]
-            st.session_state.agent_used = "RAG"
-            st.session_state.agent_details = {
-                "sources_used": len(result["source_documents"])
-            }
+            
+            if not result["source_documents"]:
+                st.session_state.answer = "I'm sorry, but I don't have information about that in the documents you've provided. Please ask a question related to the documents you've uploaded or processed."
+                st.session_state.sources = []
+                st.session_state.agent_used = "RAG"
+                st.session_state.agent_details = {
+                    "sources_used": 0,
+                    "info": "No relevant sources found in documents"
+                }
+                add_log("Query outside document scope detected, providing fallback response")
+                print("Query outside document scope detected, providing fallback response")
+            else:
+                # Relevant documents found, proceed with answer
+                st.session_state.answer = result["result"]
+                st.session_state.sources = result["source_documents"]
+                st.session_state.agent_used = "RAG"
+                st.session_state.agent_details = {
+                    "sources_used": len(result["source_documents"])
+                }
         
         add_log(f"Query processed successfully using {st.session_state.agent_used} agent")
         print(f"Query processed successfully using {st.session_state.agent_used} agent")
@@ -450,7 +539,6 @@ def query_system(question):
         add_log(f"Error during query processing: {str(e)}")
         print(f"Error during query processing: {str(e)}")
         st.error(f"Error processing your question: {str(e)}")
-
 
 def query_system_with_info(question, tool="Dictionary"):
     """Fallback query function that uses the QA chain when dictionary fails"""
@@ -479,11 +567,11 @@ def query_system_with_info(question, tool="Dictionary"):
 def route_query(question):
     question_lower = question.lower()
     
-    if any(keyword in question_lower for keyword in ["calculate", "compute", "math", "sum", "difference", "multiply", "divide"]):
+    if any(keyword in question_lower for keyword in ["calculate", "compute", "math", "sum", "difference", "multiply", "divide","plus","minus","add","+","-","*","/","factorial","!","power","exponent","^","square root","sqrt","√","log","logarithm","trigonometric","sin","cos","tan","pi","trig","trigonometry","trigonometrical","trigonometric functions","trigonometric ratios","trigonometric identities"]):
         add_log("Routing to Calculator agent")
         print("Routing to Calculator agent")
         return "calculator"
-    elif any(keyword in question_lower for keyword in ["define", "definition", "meaning", "what is", "what are"]):
+    elif any(keyword in question_lower for keyword in ["define", "definition", "meaning","means", "what are"]):
         add_log("Routing to Dictionary agent")
         print("Routing to Dictionary agent")
         return "dictionary"
@@ -500,17 +588,16 @@ def create_qa_chain(vectorstore):
         
     add_log("Setting up retriever...")
     print("Setting up retriever...")
-    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+    retriever = vectorstore.as_retriever(
+        search_type="similarity_score_threshold", 
+        search_kwargs={"k": 3, "score_threshold": 0.5}  
+    )
     
-    # api_key = ""
-    
-   
-    # os.environ["GOOGLE_API_KEY"] = api_key
     api_key = os.environ["GOOGLE_API_KEY"]
     add_log("Initializing LLM...")
     print("Initializing LLM...")
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash",convert_system_message_to_human=True)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", convert_system_message_to_human=True)
         
         add_log("Creating QA chain...")
         print("Creating QA chain...")
@@ -754,8 +841,6 @@ with tab4:
             add_log("API key saved")
             st.success("API key saved successfully!")
             
-            # If documents are processed but QA chain failed due to missing API key,
-            # try to recreate the QA chain
             if st.session_state.vector_store is not None and st.session_state.qa_chain is None:
                 st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
                 if st.session_state.qa_chain is not None:
