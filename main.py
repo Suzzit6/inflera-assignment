@@ -589,7 +589,7 @@ def create_qa_chain(vectorstore):
     print("Setting up retriever...")
     retriever = vectorstore.as_retriever(
         search_type="similarity_score_threshold", 
-        search_kwargs={"k": 3, "score_threshold": 0.5}  
+        search_kwargs={"k": 3, "score_threshold": 0.1}  
     )
     
     api_key = os.environ["GOOGLE_API_KEY"]
