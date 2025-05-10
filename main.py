@@ -477,6 +477,8 @@ def dictionary_agent(question):
             "tool_used": "Dictionary",
             "error": "Failed to extract term"
         }
+        
+        
 def query_system(question):
     if st.session_state.qa_chain is None and question.lower().startswith(("calculate", "define")):
         pass
@@ -510,27 +512,14 @@ def query_system(question):
             }
             st.session_state.sources = []
             
-        else: 
+        else:  # RAG
             result = st.session_state.qa_chain(question)
-            
-            if not result["source_documents"]:
-                st.session_state.answer = "I'm sorry, but I don't have information about that in the documents you've provided. Please ask a question related to the documents you've uploaded or processed."
-                st.session_state.sources = []
-                st.session_state.agent_used = "RAG"
-                st.session_state.agent_details = {
-                    "sources_used": 0,
-                    "info": "No relevant sources found in documents"
-                }
-                add_log("Query outside document scope detected, providing fallback response")
-                print("Query outside document scope detected, providing fallback response")
-            else:
-                # Relevant documents found, proceed with answer
-                st.session_state.answer = result["result"]
-                st.session_state.sources = result["source_documents"]
-                st.session_state.agent_used = "RAG"
-                st.session_state.agent_details = {
-                    "sources_used": len(result["source_documents"])
-                }
+            st.session_state.answer = result["result"]
+            st.session_state.sources = result["source_documents"]
+            st.session_state.agent_used = "RAG"
+            st.session_state.agent_details = {
+                "sources_used": len(result["source_documents"])
+            }
         
         add_log(f"Query processed successfully using {st.session_state.agent_used} agent")
         print(f"Query processed successfully using {st.session_state.agent_used} agent")
@@ -539,6 +528,9 @@ def query_system(question):
         add_log(f"Error during query processing: {str(e)}")
         print(f"Error during query processing: {str(e)}")
         st.error(f"Error processing your question: {str(e)}")
+
+
+
 
 def query_system_with_info(question, tool="Dictionary"):
     """Fallback query function that uses the QA chain when dictionary fails"""
@@ -749,6 +741,7 @@ with tab1:
 
 with tab2:
     st.markdown('<h2 class="tab-subheader">Ask Questions</h2>', unsafe_allow_html=True)
+    st.markdown("<p>For calculations, use keywords like calculate,compute,etc. For definitions, use keywords like define, meaning, etc.</p>", unsafe_allow_html=True)
     
     if not st.session_state.documents_processed:
         st.warning("Please process documents in the 'Document Processing' tab first.")
