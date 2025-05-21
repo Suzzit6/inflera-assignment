@@ -9,17 +9,20 @@ from huggingface_hub import login
 from langchain.chains import RetrievalQA
 from langchain_google_genai import ChatGoogleGenerativeAI
 from PyDictionary import PyDictionary
-from langchain_community.document_loaders import PyPDFLoader
+# from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import TextLoader
+from langchain_community.document_loaders import Docx2txtLoader  # Add this import for DOCX support
 import re
 from sympy import symbols, sympify, factorial, sqrt, log, exp, sin, cos, tan, pi
+
+
 st.set_page_config(
-    page_title="Inflera Document Assistant",
+    page_title="Document Assistant",
     page_icon="📚",
     layout="wide"
 )
 
-# Custom CSS for better UI
+
 st.markdown("""
 <style>
     .main {
@@ -96,19 +99,94 @@ st.markdown("""
         background-color: #f9f9f9;
         padding: 1.5rem;
         border-radius: 10px;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem; /* Reduced from 2rem to 1rem */
         border-bottom: 3px solid #4285f4;
     }
     .tab-subheader {
         color: #4285f4;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem; /* Reduced from 1rem to 0.5rem */
     }
     .stRadio > div {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem; /* Reduced from 1.5rem to 1rem */
+    }
+    .chat-message {
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+    }
+    .chat-message.user {
+        background-color: #e6f2ff;
+        border-left: 5px solid #4285f4;
+        color: #333; /* Ensure text color is visible */
+    }
+    .chat-message.assistant {
+        background-color: #f0f0f0;
+        border-left: 5px solid #424242;
+        color: #333; /* Ensure text color is visible */
+    }
+    .chat-message .message-content {
+        margin-top: 0.5rem;
+        color: #333; /* Ensure text color is visible */
+    }
+    .chat-container {
+        height: 60vh;
+        overflow-y: auto;
+        padding: 1rem;
+        background-color: #f9f9f9;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        margin-top: 0.5rem; /* Added to reduce space after the header */
+    }
+    /* Remove space between elements */
+    .tab-content {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    .message-input {
+        border-radius: 0.5rem;
+        border: 1px solid #ddd;
+        margin-top: 0; /* Remove any extra margin */
+    }
+    .agent-badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .agent-badge.calculator {
+        background-color: #ffe0b2;
+        color: #e65100;
+    }
+    .agent-badge.dictionary {
+        background-color: #e1bee7;
+        color: #6a1b9a;
+    }
+    .agent-badge.rag {
+        background-color: #bbdefb;
+        color: #0d47a1;
+    }
+    /* Fix the welcome message display */
+    .welcome-message {
+        text-align: center;
+        padding: 2rem;
+        color: #333; /* Darker text color for better visibility */
+        background-color: #f9f9f9;
+        border-radius: 10px;
+    }
+    /* Remove extra padding in tabs */
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 0.5rem !important;
+    }
+    /* Ensure text is visible in all areas */
+    p, div, span {
+        color: #333;
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # Initialize session state variables
 if 'logs' not in st.session_state:
@@ -132,9 +210,12 @@ if 'api_key' not in st.session_state:
 if 'agent_used' not in st.session_state:
     st.session_state.agent_used = None
 if 'agent_details' not in st.session_state:
-    st.session_state.agent_details = None    
+    st.session_state.agent_details = None
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'vectorstore_loaded' not in st.session_state:
+    st.session_state.vectorstore_loaded = False
 
-# Function to add logs with timestamps
 def add_log(message):
     timestamp = time.strftime("%H:%M:%S")
     st.session_state.logs.append(f"[{timestamp}] {message}")
@@ -145,7 +226,6 @@ def load_documents(uploaded_files):
     processed_files = []
     
     for uploaded_file in uploaded_files:
-        # Save uploaded file temporarily
         temp_dir = "temp_uploaded_files"
         os.makedirs(temp_dir, exist_ok=True)
         file_path = os.path.join(temp_dir, uploaded_file.name)
@@ -159,9 +239,12 @@ def load_documents(uploaded_files):
         if uploaded_file.name.endswith('.txt'):
             loader = TextLoader(file_path)
             processed_files.append({"name": uploaded_file.name, "type": "Text"})
-        elif uploaded_file.name.endswith('.pdf'):
-            loader = PyPDFLoader(file_path)
+        # elif uploaded_file.name.endswith('.pdf'):
+        #     loader = PyPDFLoader(file_path)
             processed_files.append({"name": uploaded_file.name, "type": "PDF"})
+        elif uploaded_file.name.endswith(('.docx', '.doc')):  # Add DOCX support
+            loader = Docx2txtLoader(file_path)
+            processed_files.append({"name": uploaded_file.name, "type": "DOCX"})
         else:
             add_log(f"Unsupported file format: {uploaded_file.name}")
             print(f"Unsupported file format: {uploaded_file.name}")
@@ -195,9 +278,12 @@ def load_documents_from_folder(folder_path):
         if filename.endswith('.txt'):
             loader = TextLoader(file_path)
             processed_files.append({"name": filename, "type": "Text"})
-        elif filename.endswith('.pdf'):
-            loader = PyPDFLoader(file_path)
+        # elif filename.endswith('.pdf'):
+        #     loader = PyPDFLoader(file_path)
             processed_files.append({"name": filename, "type": "PDF"})
+        elif filename.endswith(('.docx', '.doc')):  # Add DOCX support
+            loader = Docx2txtLoader(file_path)
+            processed_files.append({"name": filename, "type": "DOCX"})
         else:
             add_log(f"Skipping unsupported file: {filename}")
             print(f"Skipping unsupported file: {filename}")
@@ -209,7 +295,6 @@ def load_documents_from_folder(folder_path):
     print(f"Loaded {len(docs)} documents from folder")
     st.session_state.processed_files = processed_files
     return docs
-
 # Chunk documents function
 def chunk_documents(documents, chunk_size=500, chunk_overlap=100):
     if not documents:
@@ -244,7 +329,6 @@ def embed_and_store(chunks):
     print("Creating vector database...")
     vectorstore = FAISS.from_documents(chunks, embeddings)
     
-    # Save to disk
     vectorstore_dir = "rag_vectorstore"
     os.makedirs(vectorstore_dir, exist_ok=True)
     vectorstore.save_local(vectorstore_dir)
@@ -339,19 +423,16 @@ def calculator_agent(question):
     
     if math_expression:
         try:
-            # Make sure sympy's functions are available in the namespace
             x = symbols('x')
             namespace = {"factorial": factorial, "sqrt": sqrt, "log": log, 
                         "exp": exp, "sin": sin, "cos": cos, "tan": tan, "pi": pi}
             
             result = sympify(math_expression, locals=namespace)
             
-            # Handle complex results
             if result.is_real:
                 if result.is_integer:
                     result_str = str(int(result))
                 else:
-                    # Format floats to a reasonable precision
                     result_str = f"{float(result):.6f}".rstrip('0').rstrip('.')
             else:
                 result_str = str(result)
@@ -495,41 +576,67 @@ def query_system(question):
     try:
         if agent_type == "calculator":
             result = calculator_agent(question)
-            st.session_state.answer = result["result"]
-            st.session_state.agent_used = "Calculator"
-            st.session_state.agent_details = {
+            answer = result["result"]
+            agent_used = "Calculator"
+            agent_details = {
                 "expression": result.get("math_expression", "Unknown")
             }
-            st.session_state.sources = []
+            sources = []
             
         elif agent_type == "dictionary":
             print("Using dictionary")
             result = dictionary_agent(question)
-            st.session_state.answer = result["result"]
-            st.session_state.agent_used = "Dictionary"
-            st.session_state.agent_details = {
+            answer = result["result"]
+            agent_used = "Dictionary"
+            agent_details = {
                 "term": result.get("term", "Unknown")
             }
-            st.session_state.sources = []
+            sources = []
             
         else:  # RAG
             result = st.session_state.qa_chain(question)
-            st.session_state.answer = result["result"]
-            st.session_state.sources = result["source_documents"]
-            st.session_state.agent_used = "RAG"
-            st.session_state.agent_details = {
+            answer = result["result"]
+            sources = result["source_documents"]
+            agent_used = "RAG"
+            agent_details = {
                 "sources_used": len(result["source_documents"])
             }
         
-        add_log(f"Query processed successfully using {st.session_state.agent_used} agent")
-        print(f"Query processed successfully using {st.session_state.agent_used} agent")
+        add_log(f"Query processed successfully using {agent_used} agent")
+        print(f"Query processed successfully using {agent_used} agent")
+        
+        # Add to chat history
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": question
+        })
+        
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": answer,
+            "agent_used": agent_used,
+            "agent_details": agent_details,
+            "sources": sources
+        })
         
     except Exception as e:
         add_log(f"Error during query processing: {str(e)}")
         print(f"Error during query processing: {str(e)}")
-        st.error(f"Error processing your question: {str(e)}")
-
-
+        
+        error_message = f"Error processing your question: {str(e)}"
+        
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": question
+        })
+        
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": error_message,
+            "agent_used": "Error",
+            "agent_details": {"error": str(e)},
+            "sources": []
+        })
 
 
 def query_system_with_info(question, tool="Dictionary"):
@@ -571,6 +678,32 @@ def route_query(question):
         print("Routing to RAG agent")
         return "rag"
 
+def load_vectorstore():
+    """Load the preexisting vector store"""
+    vectorstore_dir = "rag_vectorstore"
+    
+    if not os.path.exists(vectorstore_dir):
+        add_log(f"ERROR: Vector store directory '{vectorstore_dir}' not found!")
+        print(f"ERROR: Vector store directory '{vectorstore_dir}' not found!")
+        return None
+    
+    try:
+        add_log("Loading embedding model...")
+        print("Loading embedding model...")
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        
+        add_log("Loading vector database from disk...")
+        print("Loading vector database from disk...")
+        vectorstore = FAISS.load_local(vectorstore_dir, embeddings, allow_dangerous_deserialization=True)
+        
+        add_log("Vector database loaded successfully!")
+        print("Vector database loaded successfully!")
+        return vectorstore
+    except Exception as e:
+        add_log(f"Error loading vector database: {str(e)}")
+        print(f"Error loading vector database: {str(e)}")
+        return None
+
 def create_qa_chain(vectorstore):
     if vectorstore is None:
         add_log("Error: No vector store available to create QA chain!")
@@ -584,7 +717,18 @@ def create_qa_chain(vectorstore):
         search_kwargs={"k": 3, "score_threshold": 0.1}  
     )
     
-    api_key = os.environ["GOOGLE_API_KEY"]
+    # Try to get API key from environment first, then from session state
+    # api_key = "AIzaSyCiY8WwfFnZXuUEzWvBzmHl0OqpHLiUHJQ"
+    api_key = os.environ.get("GOOGLE_API_KEY", st.session_state.api_key)
+    
+    if not api_key:
+        add_log("No Google API key found. Please set it in the settings.")
+        print("No Google API key found. Please set it in the settings.")
+        return None
+    
+    # Set the API key in the environment
+    os.environ["GOOGLE_API_KEY"] = api_key
+    
     add_log("Initializing LLM...")
     print("Initializing LLM...")
     try:
@@ -623,201 +767,112 @@ def route_query(question):
         print("Routing to RAG agent")
         return "rag"
 
-def process_documents(documents, chunk_size, chunk_overlap):
-    if not documents:
-        return False
-        
-    chunks = chunk_documents(documents, chunk_size, chunk_overlap)
-    if not chunks:
-        return False
-        
-    st.session_state.vector_store = embed_and_store(chunks)
-    if st.session_state.vector_store is None:
-        return False
-        
-    st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
-    if st.session_state.qa_chain is None:
-        return False
-        
-    st.session_state.documents_processed = True
-    return True
-
 with st.container():
     st.markdown('<div class="header-container">', unsafe_allow_html=True)
-    st.title("📚 Inflera Document Assistant")
-    st.markdown("#### Upload documents, process them, and ask questions to get insightful answers.")
+    st.title("Document Assistant")
+    st.markdown("#### Ask questions about your documents and get intelligent answers")
     st.markdown('</div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4 = st.tabs(["Document Processing", "Ask Questions", "System Logs", "Settings"])
+if not st.session_state.vectorstore_loaded:
+    with st.spinner("Loading vector store from disk..."):
+        st.session_state.vector_store = load_vectorstore()
+        if st.session_state.vector_store is not None:
+            st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
+            if st.session_state.qa_chain is not None:
+                st.session_state.documents_processed = True
+                st.session_state.vectorstore_loaded = True
+                add_log("Vector store and QA chain successfully initialized")
+            else:
+                st.error("Failed to create QA chain. Please check your API key in the settings.")
+        else:
+            st.error("Failed to load vector store. Please make sure the 'rag_vectorstore' folder exists and contains index files.")
+
+tab1, tab2 = st.tabs(["Chatbot", "Settings"])
 
 with tab1:
-    st.markdown('<h2 class="tab-subheader">Document Processing</h2>', unsafe_allow_html=True)
-    
-    if st.session_state.documents_processed:
-        st.success("✅ Documents processed and ready for querying!")
-        
-        if st.session_state.processed_files:
-            st.markdown("### Processed Files")
-            for i, file in enumerate(st.session_state.processed_files):
-                st.markdown(f"**{i+1}.** {file['name']} ({file['type']})")
-    
-    doc_option = st.radio(
-        "Select document source:",
-        ["Use default company documents", "Upload custom documents"]
-    )
-    
-    if doc_option == "Use default company documents":
-        default_folder = "company"
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.info(f"This will process all TXT and PDF files from the '{default_folder}' folder.")
-            
-        with col2:
-            process_button = st.button("Process Default Documents")
-        
-        if process_button:
-            st.session_state.processing = True
-            
-        if st.session_state.processing and doc_option == "Use default company documents":
-            with st.spinner("Processing default documents..."):
-                add_log(f"Using default documents from '{default_folder}' folder")
-                print(f"Using default documents from '{default_folder}' folder")
-                
-                # Check if folder exists
-                if not os.path.exists(default_folder):
-                    st.error(f"Default folder '{default_folder}' not found. Please create it and add documents.")
-                    add_log(f"ERROR: Default folder '{default_folder}' not found")
-                    print(f"ERROR: Default folder '{default_folder}' not found")
-                    st.session_state.processing = False
-                else:
-                    documents = load_documents_from_folder(default_folder)
-                    success = process_documents(documents, 500, 100)
-                    
-                    if success:
-                        st.success(f"✅ Successfully processed {len(documents)} documents and created chunks.")
-                    else:
-                        st.error("Failed to process documents. Check logs for details.")
-                    
-                    st.session_state.processing = False
-    else:
-        uploaded_files = st.file_uploader(
-            "Upload your documents (TXT or PDF)",
-            type=["txt", "pdf"],
-            accept_multiple_files=True,
-            help="Upload one or more TXT or PDF files to analyze"
-        )
-        
-        with st.expander("Advanced Settings"):
-            chunk_size = st.slider("Chunk Size", min_value=100, max_value=2000, value=500, step=100, 
-                                help="Size of each document chunk in characters. Smaller chunks mean more precise retrieval but may lose context.")
-            chunk_overlap = st.slider("Chunk Overlap", min_value=0, max_value=500, value=100, step=50,
-                                    help="Overlap between chunks to maintain context between them.")
-        
-        if uploaded_files:
-            st.info(f"Ready to process {len(uploaded_files)} files.")
-            process_button = st.button("Process Uploaded Documents")
-            
-            if process_button:
-                st.session_state.processing = True
-                
-            if st.session_state.processing and doc_option == "Upload custom documents":
-                with st.spinner("Processing uploaded documents..."):
-                    add_log(f"Processing {len(uploaded_files)} uploaded documents")
-                    print(f"Processing {len(uploaded_files)} uploaded documents")
-                    
-                    documents = load_documents(uploaded_files)
-                    success = process_documents(documents, chunk_size, chunk_overlap)
-                    
-                    if success:
-                        st.success(f"✅ Successfully processed {len(documents)} documents!")
-                    else:
-                        st.error("Failed to process documents. Check logs for details.")
-                        
-                    st.session_state.processing = False
-        else:
-            st.info("Please upload one or more documents to get started.")
-
-with tab2:
-    st.markdown('<h2 class="tab-subheader">Ask Questions</h2>', unsafe_allow_html=True)
-    st.markdown("<p>For calculations, use keywords like calculate,compute,etc. For definitions, use keywords like define, meaning, etc.</p>", unsafe_allow_html=True)
+    st.markdown('<h2 class="tab-subheader">Document Assistant Chatbot</h2>', unsafe_allow_html=True)
     
     if not st.session_state.documents_processed:
-        st.warning("Please process documents in the 'Document Processing' tab first.")
-        st.info("Once your documents are processed, you can ask questions about their content here.")
-    else:
-        # Query input
-        user_question = st.text_input(
-            "Ask a question about the documents:",
-            key="query_input",
-            placeholder="Example: What is Inflera's remote work policy?"
-        )
+        st.warning("System is initializing. Please wait or check Settings tab if this persists.")
+    else: 
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
         
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            submit = st.button("Submit Question", use_container_width=True)
-        with col2:
-            clear = st.button("Clear Results", use_container_width=True)
-            
-        if clear:
-            st.session_state.answer = None
-            st.session_state.sources = []
-            
-        if submit:
-            if user_question:
-                with st.spinner("Thinking..."):
-                    query_system(user_question)
-            else:
-                st.warning("Please enter a question.")
-        
-        if st.session_state.answer:
-            st.markdown("### Answer")
-            
-            if hasattr(st.session_state, 'agent_used'):
-                agent_color = {
-                    "Calculator": "orange",
-                    "Dictionary": "purple",
-                    "RAG": "blue"
-                }.get(st.session_state.agent_used, "gray")
                 
-                st.markdown(f"""
-                <div style="background-color: black; padding: 10px; border-radius: 5px; margin-bottom: 15px; 
-                             border-left: 4px solid {agent_color};">
-                    <b>Agent used:</b> {st.session_state.agent_used}
-                    {f"<br><b>Details:</b> {st.session_state.agent_details}" if hasattr(st.session_state, 'agent_details') else ""}
-                </div>
-                """, unsafe_allow_html=True)
+        if not st.session_state.chat_history:
+            st.markdown("""
+            <div class="welcome-message">
+                <p>👋 Hello! I'm your document assistant.</p>
+                <p>Ask me questions about your documents, calculations, or definitions!</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for message in st.session_state.chat_history:
+                if message["role"] == "user":
+                    st.markdown(f"""
+                    <div class="chat-message user">
+                        <b>You:</b>
+                        <div class="message-content">{message["content"]}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:  # assistant
+                    agent_class = ""
+                    agent_badge = ""
+                    
+                    if "agent_used" in message:
+                        if message["agent_used"] == "Calculator":
+                            agent_class = "calculator"
+                        elif message["agent_used"] == "Dictionary":
+                            agent_class = "dictionary"
+                        elif message["agent_used"] == "RAG":
+                            agent_class = "rag"
+                            
+                        agent_badge = f'<span class="agent-badge {agent_class}">{message["agent_used"]}</span>'
+                    
+                    st.markdown(f"""
+                    <div class="chat-message assistant">
+                        <b>Assistant:</b> {agent_badge}
+                        <div class="message-content" >{message["content"]}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if "sources" in message and message.get("agent_used") == "RAG" and message["sources"]:
+                        with st.expander("View Source Documents"):
+                            for i, source in enumerate(message["sources"]):
+                                st.markdown(f"""
+                                <div class="source-box">
+                                    <b>Source {i+1}:</b><br>
+                                    <p>{source.page_content}</p>
+                                    <i>From: {source.metadata.get('source', 'Unknown')}</i>
+                                </div>
+                                """, unsafe_allow_html=True)
+                    
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        with st.container():
+            user_question = st.text_input(
+                "",
+                key="chat_input",
+                placeholder="Ask me anything about Nvidia",
+                label_visibility="collapsed"
+            )
             
-            st.markdown('<div class="answer-container">' + st.session_state.answer + '</div>', unsafe_allow_html=True)
-        if st.session_state.sources and st.session_state.agent_used == "RAG":
-            st.markdown("### Source Documents")
-            for i, source in enumerate(st.session_state.sources):
-                st.markdown(f"""
-                <div class="source-box">
-                    <b>Source {i+1}:</b><br>
-                    <p>{source.page_content}</p>
-                    <i>From: {source.metadata.get('source', 'Unknown')}</i>
-                </div>
-                """, unsafe_allow_html=True)
-with tab3:
-    st.markdown('<h2 class="tab-subheader">System Logs</h2>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([4, 1])
-    with col2:
-        if st.button("Clear Logs", use_container_width=True):
-            st.session_state.logs = []
-            st.success("Logs cleared!")
-    
-    st.markdown('<div class="log-container">', unsafe_allow_html=True)
-    if not st.session_state.logs:
-        st.info("No logs recorded yet. Process some documents to see activity logs.")
-    else:
-        for log in st.session_state.logs:
-            st.markdown(f'<div class="log-entry">{log}</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+            col1, col2 = st.columns([5, 1])
+            
+            with col1:
+                submit_placeholder = st.empty()
+            
+            with col2:
+                if st.button("Clear Chat", use_container_width=True):
+                    st.session_state.chat_history = []
+                    st.rerun()
+            
+            if user_question:
+                if submit_placeholder.button("Send", use_container_width=True):
+                    with st.spinner("Thinking..."):
+                        query_system(user_question)
+                    st.rerun()  # Rerun to update the UI
 
-with tab4:
+with tab2:
     st.markdown('<h2 class="tab-subheader">Settings</h2>', unsafe_allow_html=True)
     
     api_key = st.text_input(
@@ -831,16 +886,49 @@ with tab4:
         if api_key:
             st.session_state.api_key = api_key
             add_log("API key saved")
-            st.success("API key saved successfully!")
+            os.environ["GOOGLE_API_KEY"] = api_key
             
-            # If documents are processed but QA chain failed due to missing API key,
-            # try to recreate the QA chain
             if st.session_state.vector_store is not None and st.session_state.qa_chain is None:
-                st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
-                if st.session_state.qa_chain is not None:
-                    st.success("QA chain recreated successfully with new API key!")
+                with st.spinner("Initializing chatbot with new API key..."):
+                    st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
+                    if st.session_state.qa_chain is not None:
+                        st.session_state.documents_processed = True
+                        st.success("Chatbot initialized successfully with new API key!")
+            
+            st.success("API key saved successfully!")
         else:
             st.warning("Please enter an API key")
+    
+    with st.expander("System Status"):
+        st.markdown(f"**Vector Store Loaded:** {st.session_state.vector_store is not None}")
+        st.markdown(f"**QA Chain Initialized:** {st.session_state.qa_chain is not None}")
+        st.markdown(f"**Documents Processed:** {st.session_state.documents_processed}")
+        
+        if st.button("Reload Vector Store"):
+            with st.spinner("Reloading vector store..."):
+                st.session_state.vector_store = load_vectorstore()
+                if st.session_state.vector_store is not None:
+                    st.session_state.qa_chain = create_qa_chain(st.session_state.vector_store)
+                    if st.session_state.qa_chain is not None:
+                        st.session_state.documents_processed = True
+                        st.success("Vector store and QA chain successfully reloaded!")
+                    else:
+                        st.error("Failed to create QA chain. Please check your API key.")
+                else:
+                    st.error("Failed to load vector store.")
+    
+    with st.expander("System Logs"):
+        if st.button("Clear Logs"):
+            st.session_state.logs = []
+            st.success("Logs cleared!")
+        
+        st.markdown('<div class="log-container">', unsafe_allow_html=True)
+        if not st.session_state.logs:
+            st.info("No logs recorded yet.")
+        else:
+            for log in st.session_state.logs:
+                st.markdown(f'<div class="log-entry">{log}</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("### About")
     st.markdown("""
@@ -849,8 +937,8 @@ with tab4:
     - Hugging Face embeddings for document indexing
     - FAISS for efficient vector similarity search
     
-    To use this application:
-    1. Process documents in the Document Processing tab
-    2. Ask questions in the Ask Questions tab
-    3. View system logs in the System Logs tab
+    The system can:
+    - Answer questions about your documents using RAG technology
+    - Perform calculations using the Calculator module
+    - Provide definitions using the Dictionary module
     """)
